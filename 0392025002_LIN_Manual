@@ -1,0 +1,99 @@
+/*PDE-L LIN 
+ * Bosch PN 0 392 025 002
+ * Customer Ford
+ * EID 0145Y000LX V1.1
+ * LIN Manual Control w/Buttons
+ * Author: Leobardo Lopez LOL4TL
+ */
+
+#include <Adafruit_RGBLCDShield.h>
+#include <Adafruit_MCP23017.h>
+#include "Arduino.h"
+#include "lin.h"
+#include <Wire.h>
+
+Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
+#define WHITE 0x7
+
+//Definitions for LIN Transceiver pins
+#define LIN_TRX_CS_PIN 8
+#define LIN_TRX_FAULT_PIN 7
+
+//LIN Bus Protocol Version
+uint8_t LIN_BUS_PROTOCOL_VERSION = 2;
+
+//Create an instance for LIN Bus
+Lin LIN_BUS;
+
+//Pump Speed Command Frame ID
+uint8_t COMMAND_MECPA_LIN_ID  = 0x28;
+
+//Pump Speed Command Frame Length
+uint8_t COMMAND_MECPA_LIN_LENGTH = 2;
+
+//Pump Speed Command Signal
+uint8_t CMD_TGT_RPM_PUMP_MECPA =  0x00;
+uint8_t CMD_Mode_PUMP_Rq_MECPA_CMD_Reset_Rq_MECPA = 0x00;
+
+//Pump Speed Command Frame
+uint8_t COMMAND_MECPA_LIN [] = { CMD_TGT_RPM_PUMP_MECPA, CMD_Mode_PUMP_Rq_MECPA_CMD_Reset_Rq_MECPA};
+
+void setup() {
+ 
+  // Set up the LCD
+  lcd.begin(16, 2);
+  lcd.begin(16, 2);
+  lcd.setBacklight(WHITE);
+  lcd.print("Ford LIN Manual");
+  lcd.setCursor(0, 1);
+  lcd.print("Speed Value");
+  lcd.setCursor(13, 1);
+  lcd.print("0   ");
+
+  //LED for indication that program is running
+  digitalWrite(2, HIGH);
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  //Configuration of Arduino UNO pins for LIN TRX shield
+  pinMode(LIN_TRX_CS_PIN, OUTPUT);
+  digitalWrite(LIN_TRX_CS_PIN, HIGH);
+  pinMode(LIN_TRX_FAULT_PIN, OUTPUT);
+  digitalWrite(LIN_TRX_FAULT_PIN, HIGH);    
+
+  //Set up baudrate for LIN Bus
+  LIN_BUS.begin(10417);
+}
+
+void loop() {
+  lcd.setCursor(13, 1);
+  uint8_t buttons = lcd.readButtons();
+
+  if (buttons) {
+    if (buttons & BUTTON_RIGHT) {
+      CMD_TGT_RPM_PUMP_MECPA++;   
+      if (CMD_TGT_RPM_PUMP_MECPA > 0xFF){
+        CMD_TGT_RPM_PUMP_MECPA = 0x00;
+        lcd.print("0  ");
+      }
+    }
+    
+    else if (buttons & BUTTON_LEFT) {
+      CMD_TGT_RPM_PUMP_MECPA--; 
+      if (CMD_TGT_RPM_PUMP_MECPA < 0x00){
+       CMD_TGT_RPM_PUMP_MECPA = 0xFF;
+        lcd.print("255");
+      }
+    }
+  }
+
+  if (CMD_TGT_RPM_PUMP_MECPA==0x00){
+    lcd.print("0  ");
+  } 
+  else {
+    lcd.print(CMD_TGT_RPM_PUMP_MECPA,DEC);
+  }
+  
+  COMMAND_MECPA_LIN[0] = CMD_TGT_RPM_PUMP_MECPA;
+  LIN_BUS.send(COMMAND_MECPA_LIN_ID, COMMAND_MECPA_LIN, COMMAND_MECPA_LIN_LENGTH, LIN_BUS_PROTOCOL_VERSION);
+  delay(100);
+}
