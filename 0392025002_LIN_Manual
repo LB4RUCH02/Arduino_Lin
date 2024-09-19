@@ -6,94 +6,104 @@
  * Author: Leobardo Lopez LOL4TL
  */
 
-#include <Adafruit_RGBLCDShield.h>
-#include <Adafruit_MCP23017.h>
+#include <LiquidCrystal.h>
 #include "Arduino.h"
 #include "lin.h"
-#include <Wire.h>
 
-Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
-#define WHITE 0x7
+//Definición de los pines para el LCD )
+LiquidCrystal lcd(8,9,4,5,6,7);
 
-//Definitions for LIN Transceiver pins
+int lcd_key     = 0;
+int adc_key_in  = 0;
+
+#define btnRIGHT  0
+#define btnUP     1
+#define btnDOWN   2
+#define btnLEFT   3
+#define btnSELECT 4
+#define btnNONE   5
+
+int read_LCD_buttons() {
+  adc_key_in = analogRead(0);
+  if (adc_key_in < 50)   return btnRIGHT;
+  if (adc_key_in < 250)  return btnUP;
+  if (adc_key_in < 450)  return btnDOWN;
+  if (adc_key_in < 600)  return btnLEFT;
+  if (adc_key_in < 920)  return btnSELECT;
+}
+//Definiciones para los pines del transceptor LIN
 #define LIN_TRX_CS_PIN 8
 #define LIN_TRX_FAULT_PIN 7
 
-//LIN Bus Protocol Version
+//Versión del protocolo LIN
 uint8_t LIN_BUS_PROTOCOL_VERSION = 2;
 
-//Create an instance for LIN Bus
+//Instancia del bus LIN
 Lin LIN_BUS;
 
-//Pump Speed Command Frame ID
+//ID del Frame del comando de velocidad de la bomba
 uint8_t COMMAND_MECPA_LIN_ID  = 0x28;
 
-//Pump Speed Command Frame Length
+//Longitud del Frame de comando de velocidad de la bomba
 uint8_t COMMAND_MECPA_LIN_LENGTH = 2;
 
-//Pump Speed Command Signal
+//Señal de comando de velocidad de la bomba
 uint8_t CMD_TGT_RPM_PUMP_MECPA =  0x00;
 uint8_t CMD_Mode_PUMP_Rq_MECPA_CMD_Reset_Rq_MECPA = 0x00;
 
-//Pump Speed Command Frame
+//Frame de comando de velocidad de la bomba
 uint8_t COMMAND_MECPA_LIN [] = { CMD_TGT_RPM_PUMP_MECPA, CMD_Mode_PUMP_Rq_MECPA_CMD_Reset_Rq_MECPA};
 
 void setup() {
- 
-  // Set up the LCD
+  // Configurar el LCD con 16 columnas y 2 filas
   lcd.begin(16, 2);
-  lcd.begin(16, 2);
-  lcd.setBacklight(WHITE);
   lcd.print("Ford LIN Manual");
   lcd.setCursor(0, 1);
-  lcd.print("Speed Value");
+  lcd.print("Speed Value:");
   lcd.setCursor(13, 1);
   lcd.print("0   ");
 
-  //LED for indication that program is running
-  digitalWrite(2, HIGH);
+  // Indicar que el programa está corriendo
   pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
 
-  //Configuration of Arduino UNO pins for LIN TRX shield
+  // Configuración de los pines del transceptor LIN
   pinMode(LIN_TRX_CS_PIN, OUTPUT);
   digitalWrite(LIN_TRX_CS_PIN, HIGH);
   pinMode(LIN_TRX_FAULT_PIN, OUTPUT);
   digitalWrite(LIN_TRX_FAULT_PIN, HIGH);    
 
-  //Set up baudrate for LIN Bus
+  // Configurar la tasa de baudios para el bus LIN
   LIN_BUS.begin(10417);
 }
 
 void loop() {
-  lcd.setCursor(13, 1);
-  uint8_t buttons = lcd.readButtons();
-
-  if (buttons) {
-    if (buttons & BUTTON_RIGHT) {
-      CMD_TGT_RPM_PUMP_MECPA++;   
-      if (CMD_TGT_RPM_PUMP_MECPA > 0xFF){
-        CMD_TGT_RPM_PUMP_MECPA = 0x00;
-        lcd.print("0  ");
-      }
-    }
-    
-    else if (buttons & BUTTON_LEFT) {
-      CMD_TGT_RPM_PUMP_MECPA--; 
-      if (CMD_TGT_RPM_PUMP_MECPA < 0x00){
-       CMD_TGT_RPM_PUMP_MECPA = 0xFF;
-        lcd.print("255");
-      }
-    }
-  }
-
-  if (CMD_TGT_RPM_PUMP_MECPA==0x00){
-    lcd.print("0  ");
-  } 
-  else {
-    lcd.print(CMD_TGT_RPM_PUMP_MECPA,DEC);
-  }
   
+  lcd.setCursor(13, 1);
+
+  // Aquí agregarías el código de lectura de botones, según cómo estén conectados.
+
+  // Incrementar o decrementar el valor de la velocidad de la bomba
+  if (analogRead(btnRIGHT) == HIGH) {
+    CMD_TGT_RPM_PUMP_MECPA++;   
+    if (CMD_TGT_RPM_PUMP_MECPA > 0xFF) {
+      CMD_TGT_RPM_PUMP_MECPA = 0x00;
+      lcd.print("0  ");
+    }
+  } else if (analogRead(btnLEFT) == HIGH) {
+    CMD_TGT_RPM_PUMP_MECPA--; 
+    if (CMD_TGT_RPM_PUMP_MECPA < 0x00) {
+      CMD_TGT_RPM_PUMP_MECPA = 0xFF;
+      lcd.print("255");
+    }
+  }
+
+  // Mostrar el valor actual de la velocidad
+  lcd.print(CMD_TGT_RPM_PUMP_MECPA, DEC);
+
+  // Enviar el comando LIN con la nueva velocidad
   COMMAND_MECPA_LIN[0] = CMD_TGT_RPM_PUMP_MECPA;
   LIN_BUS.send(COMMAND_MECPA_LIN_ID, COMMAND_MECPA_LIN, COMMAND_MECPA_LIN_LENGTH, LIN_BUS_PROTOCOL_VERSION);
+
   delay(100);
 }
