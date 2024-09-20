@@ -1,99 +1,108 @@
-/*PDE-L LIN 
- * Bosch PN 0 392 025 002
- * Customer Ford
- * EID 0145Y000LX V1.1
- * LIN Manual Control w/Buttons
- * Author: Leobardo Lopez LOL4TL
- */
-
-#include <Adafruit_RGBLCDShield.h>
-#include <Adafruit_MCP23017.h>
+#include <LiquidCrystal.h>
 #include "Arduino.h"
 #include "lin.h"
-#include <Wire.h>
+#include <SPI.h>
+#include <SD.h>
 
-Adafruit_RGBLCDShield lcd = Adafruit_RGBLCDShield();
-#define WHITE 0x7
+//Definición de los pines para el LCD
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 
-//Definitions for LIN Transceiver pins
+//Definición del pin para la tarjeta SD
+#define SD_CS_PIN 10
+
+File dataFile;
+
+//Definiciones para los pines del transceptor LIN
 #define LIN_TRX_CS_PIN 8
 #define LIN_TRX_FAULT_PIN 7
 
-//LIN Bus Protocol Version
+//Versión del protocolo LIN
 uint8_t LIN_BUS_PROTOCOL_VERSION = 2;
 
-//Create an instance for LIN Bus
+//Instancia del bus LIN
 Lin LIN_BUS;
 
-//Pump Speed Command Frame ID
+//ID del Frame del comando de velocidad de la bomba
 uint8_t COMMAND_MECPA_LIN_ID  = 0x28;
 
-//Pump Speed Command Frame Length
+//Longitud del Frame de comando de velocidad de la bomba
 uint8_t COMMAND_MECPA_LIN_LENGTH = 2;
 
-//Pump Speed Command Signal
+//Señal de comando de velocidad de la bomba
 uint8_t CMD_TGT_RPM_PUMP_MECPA =  0x00;
 uint8_t CMD_Mode_PUMP_Rq_MECPA_CMD_Reset_Rq_MECPA = 0x00;
 
-//Pump Speed Command Frame
+//Frame de comando de velocidad de la bomba
 uint8_t COMMAND_MECPA_LIN [] = { CMD_TGT_RPM_PUMP_MECPA, CMD_Mode_PUMP_Rq_MECPA_CMD_Reset_Rq_MECPA};
 
 void setup() {
- 
-  // Set up the LCD
+  // Configurar el LCD con 16 columnas y 2 filas
   lcd.begin(16, 2);
-  lcd.begin(16, 2);
-  lcd.setBacklight(WHITE);
   lcd.print("Ford LIN Manual");
   lcd.setCursor(0, 1);
-  lcd.print("Speed Value");
+  lcd.print("Speed Value:");
   lcd.setCursor(13, 1);
   lcd.print("0   ");
 
-  //LED for indication that program is running
-  digitalWrite(2, HIGH);
+  // Indicar que el programa está corriendo
   pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
 
-  //Configuration of Arduino UNO pins for LIN TRX shield
+  // Configuración de los pines del transceptor LIN
   pinMode(LIN_TRX_CS_PIN, OUTPUT);
   digitalWrite(LIN_TRX_CS_PIN, HIGH);
   pinMode(LIN_TRX_FAULT_PIN, OUTPUT);
   digitalWrite(LIN_TRX_FAULT_PIN, HIGH);    
 
-  //Set up baudrate for LIN Bus
+  // Configurar la tasa de baudios para el bus LIN
   LIN_BUS.begin(10417);
+
+  // Inicializar la tarjeta SD
+  if (!SD.begin(SD_CS_PIN)) {
+    lcd.setCursor(0, 0);
+    lcd.print("SD Init failed!");
+    return;
+  }
+  lcd.setCursor(0, 0);
+  lcd.print("SD Init success");
 }
 
 void loop() {
   lcd.setCursor(13, 1);
-  uint8_t buttons = lcd.readButtons();
 
-  if (buttons) {
-    if (buttons & BUTTON_RIGHT) {
-      CMD_TGT_RPM_PUMP_MECPA++;   
-      if (CMD_TGT_RPM_PUMP_MECPA > 0xFF){
-        CMD_TGT_RPM_PUMP_MECPA = 0x00;
-        lcd.print("0  ");
-      }
+  // Incrementar o decrementar el valor de la velocidad de la bomba
+  if (analogRead(btnRIGHT) == HIGH) {
+    CMD_TGT_RPM_PUMP_MECPA++;   
+    if (CMD_TGT_RPM_PUMP_MECPA > 0xFF) {
+      CMD_TGT_RPM_PUMP_MECPA = 0x00;
+      lcd.print("0  ");
     }
-    
-    else if (buttons & BUTTON_LEFT) {
-      CMD_TGT_RPM_PUMP_MECPA--; 
-      if (CMD_TGT_RPM_PUMP_MECPA < 0x00){
-       CMD_TGT_RPM_PUMP_MECPA = 0xFF;
-        lcd.print("255");
-      }
+  } else if (analogRead(btnLEFT) == HIGH) {
+    CMD_TGT_RPM_PUMP_MECPA--; 
+    if (CMD_TGT_RPM_PUMP_MECPA < 0x00) {
+      CMD_TGT_RPM_PUMP_MECPA = 0xFF;
+      lcd.print("255");
     }
   }
 
-  if (CMD_TGT_RPM_PUMP_MECPA==0x00){
-    lcd.print("0  ");
-  } 
-  else {
-    lcd.print(CMD_TGT_RPM_PUMP_MECPA,DEC);
-  }
-  
+  // Mostrar el valor actual de la velocidad
+  lcd.print(CMD_TGT_RPM_PUMP_MECPA, DEC);
+
+  // Enviar el comando LIN con la nueva velocidad
   COMMAND_MECPA_LIN[0] = CMD_TGT_RPM_PUMP_MECPA;
   LIN_BUS.send(COMMAND_MECPA_LIN_ID, COMMAND_MECPA_LIN, COMMAND_MECPA_LIN_LENGTH, LIN_BUS_PROTOCOL_VERSION);
+
+  // Guardar la retroalimentación en el datalogger
+  dataFile = SD.open("datalog.txt", FILE_WRITE);
+  if (dataFile) {
+    dataFile.print("Velocidad: ");
+    dataFile.println(CMD_TGT_RPM_PUMP_MECPA, DEC);
+    dataFile.close(); // Cerrar el archivo para guardar los datos
+  } else {
+    lcd.setCursor(0, 0);
+    lcd.print("Error escribiendo SD");
+  }
+
   delay(100);
 }
+
