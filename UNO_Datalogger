@@ -1,0 +1,35 @@
+#include <SPI.h>
+#include <SD.h>
+
+#define SD_CS_PIN 10  // Definir el pin CS para la tarjeta SD
+
+File dataFile;
+
+void setup() {
+  Serial.begin(9600);  // Inicializar el puerto serial para recibir datos del Mega
+  pinMode(SD_CS_PIN, OUTPUT);
+  
+  // Inicializar la tarjeta SD
+  if (!SD.begin(SD_CS_PIN)) {
+    Serial.println("SD Init failed!");
+    return;
+  }
+  Serial.println("SD Init success");
+}
+
+void loop() {
+  // Verificar si hay datos disponibles en el puerto serial
+  if (Serial.available()) {
+    String feedback = Serial.readStringUntil('\n');  // Leer la retroalimentación
+    
+    // Guardar los datos en la tarjeta SD
+    dataFile = SD.open("datalog.txt", FILE_WRITE);
+    if (dataFile) {
+      dataFile.println(feedback);  // Escribir los datos en el archivo
+      dataFile.close();  // Cerrar el archivo para guardar los datos
+      Serial.println("Datos guardados: " + feedback);
+    } else {
+      Serial.println("Error al escribir en la tarjeta SD");
+    }
+  }
+}
