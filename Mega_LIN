@@ -1,0 +1,117 @@
+/*PDE-L LIN 
+ * Bosch PN 0 392 025 002
+ * Customer Ford
+ * EID 0145Y000LX V1.1
+ * LIN Manual Control w/Buttons
+ * Author: Leobardo Lopez LOL4TL
+ */
+
+
+#include <LiquidCrystal.h>
+#include "Arduino.h"
+#include "lin.h"
+
+//Definición de los pines para el LCD
+LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+
+int lcd_key     = 0;
+int adc_key_in  = 0;
+
+#define btnRIGHT  0
+#define btnUP     1
+#define btnDOWN   2
+#define btnLEFT   3
+#define btnSELECT 4
+#define btnNONE   5
+
+int read_LCD_buttons() {
+  adc_key_in = analogRead(0);
+  if (adc_key_in > 1000) return btnNONE;
+  if (adc_key_in < 50)   return btnRIGHT;
+  if (adc_key_in < 250)  return btnUP;
+  if (adc_key_in < 450)  return btnDOWN;
+  if (adc_key_in < 600)  return btnLEFT;
+  if (adc_key_in < 920)  return btnSELECT;
+}
+
+
+//Definiciones para los pines del transceptor LIN
+#define LIN_TRX_CS_PIN 2
+#define LIN_TRX_FAULT_PIN 3
+
+//LIN Bus Protocol Version
+uint8_t LIN_BUS_PROTOCOL_VERSION = 2;
+
+//Crear una instancia para el bus LIN
+Lin LIN_BUS;
+
+//ID y longitud del frame de comando de velocidad de la bomba
+uint8_t COMMAND_MECPA_LIN_ID  = 0x14;
+uint8_t COMMAND_MECPA_LIN_LENGTH = 2;
+
+//Comando de velocidad de la bomba
+uint8_t CMD_TGT_RPM_PUMP_MECPA =  0x00;
+uint8_t CMD_Mode_PUMP_Rq_MECPA_CMD_Reset_Rq_MECPA = 0x00;
+
+//Frame de comando de velocidad de la bomba
+uint8_t COMMAND_MECPA_LIN [] = { CMD_TGT_RPM_PUMP_MECPA, CMD_Mode_PUMP_Rq_MECPA_CMD_Reset_Rq_MECPA };
+
+void setup() {
+  // Configuración del LCD
+  lcd.begin(16, 2);
+  lcd.print("Ford LIN Manual");
+  lcd.setCursor(0, 1);
+  lcd.print("Speed Value:");
+  lcd.setCursor(13, 1);
+  lcd.print("0   ");
+
+  // Indicador LED para mostrar que el programa está corriendo
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  // Configuración de los pines del transceptor LIN
+  pinMode(LIN_TRX_CS_PIN, OUTPUT);
+  digitalWrite(LIN_TRX_CS_PIN, HIGH);
+  pinMode(LIN_TRX_FAULT_PIN, OUTPUT);
+  digitalWrite(LIN_TRX_FAULT_PIN, HIGH);    
+
+  // Configuración de la tasa de baudios para el bus LIN
+  LIN_BUS.begin(14170);
+
+  // Inicializar comunicación serial con el Arduino Uno
+  Serial2.begin(9600);
+}
+
+void loop() {
+  lcd.setCursor(13, 1);
+  
+ lcd_key = read_LCD_buttons();
+    if (lcd_key==(btnUP)) {
+      CMD_TGT_RPM_PUMP_MECPA++;   
+      if (CMD_TGT_RPM_PUMP_MECPA > 0xFF) {
+        CMD_TGT_RPM_PUMP_MECPA = 0x00;
+        lcd.print("0  ");
+      }
+    }
+   else if (lcd_key==(btnDOWN)) {
+      CMD_TGT_RPM_PUMP_MECPA--; 
+      if (CMD_TGT_RPM_PUMP_MECPA < 0x00) {
+        CMD_TGT_RPM_PUMP_MECPA = 0xFF;
+        lcd.print("255");
+      }
+    }
+  
+
+  // Mostrar el valor actual de la velocidad
+  lcd.print(CMD_TGT_RPM_PUMP_MECPA, DEC);
+
+  // Enviar el comando LIN con la nueva velocidad
+  COMMAND_MECPA_LIN[0] = CMD_TGT_RPM_PUMP_MECPA;
+  LIN_BUS.send(COMMAND_MECPA_LIN_ID, COMMAND_MECPA_LIN, COMMAND_MECPA_LIN_LENGTH, LIN_BUS_PROTOCOL_VERSION);
+
+  // Enviar la retroalimentación al Arduino Uno por el puerto Serial2
+  Serial2.print("Velocidad: ");
+  Serial2.println(CMD_TGT_RPM_PUMP_MECPA, DEC);
+
+  delay(100);
+}
